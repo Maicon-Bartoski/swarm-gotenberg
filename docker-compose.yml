@@ -1,0 +1,61 @@
+version: "3.7"
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    volumes:
+      - gotenberg_data:/gotenberg  # Volume para armazenamento persistente
+    networks:
+      - cloud  # Rede externa do sistema
+    environment:
+      # Configurações da API
+      - API_PORT=3000  # Porta em que a API Gotenberg escuta
+      - API_START_TIMEOUT=30s  # Tempo máximo para inicialização da API
+      - API_TIMEOUT=60s  # Tempo limite para requisições da API
+      - API_ROOT_PATH=/  # Caminho base da API (padrão)
+      - API_TRACE_HEADER=Gotenberg-Trace  # Cabeçalho para rastreamento de requisições
+      - API_DISABLE_HEALTH_CHECK_LOGGING=false  # Habilita/desabilita logs de verificação de saúde
+
+      # Configurações do Chromium (para conversão de HTML/URL em PDF)
+      - CHROMIUM_AUTO_START=true  # Inicia o Chromium automaticamente ao subir o serviço
+      - CHROMIUM_START_TIMEOUT=20s  # Tempo máximo para inicialização do Chromium
+      - CHROMIUM_RESTART_AFTER=10  # Reinicia o Chromium após X conversões
+      - CHROMIUM_MAX_QUEUE_SIZE=100  # Limite da fila de requisições do Chromium
+      - CHROMIUM_ALLOW_LIST=.*  # Regex de URLs permitidas para conversão
+      - CHROMIUM_DENY_LIST=^file:(?!//\/tmp/).*  # Regex de URLs negadas
+      - CHROMIUM_DISABLE_JAVASCRIPT=false  # Habilita/desabilita JavaScript nas páginas
+
+      # Configurações do LibreOffice (para conversão de documentos)
+      - LIBREOFFICE_AUTO_START=true  # Inicia o LibreOffice automaticamente
+      - LIBREOFFICE_START_TIMEOUT=20s  # Tempo máximo para inicialização do LibreOffice
+      - LIBREOFFICE_RESTART_AFTER=10  # Reinicia o LibreOffice após X conversões
+
+      # Configurações de Logging
+      - LOG_LEVEL=info  # Nível de detalhe dos logs (info, debug, etc.)
+      - LOG_FORMAT=json  # Formato dos logs (json para estruturado, text para simples)
+
+      # Configurações de Shutdown
+      - GOTENBERG_GRACEFUL_SHUTDOWN_DURATION=60s  # Tempo para encerramento graceful do serviço
+    deploy:
+      mode: replicated  # Modo de implantação (replicated para réplicas fixas)
+      replicas: 1  # Número de instâncias do serviço
+      placement:
+        constraints:
+          - node.role == manager  # Restringe a execução a nós managers
+      labels:
+        - traefik.enable=true  # Habilita o Traefik como proxy reverso
+        - traefik.http.routers.gotenberg.rule=Host(`[SEU_DOMINIO]`)  # Domínio para acessar o serviço
+        - traefik.http.routers.gotenberg.entrypoints=websecure  # Entrypoint HTTPS do Traefik
+        - traefik.http.routers.gotenberg.priority=1  # Prioridade de roteamento
+        - traefik.http.routers.gotenberg.tls.certresolver=letsencryptresolver  # Resolver de certificados TLS
+        - traefik.http.services.gotenberg.loadbalancer.server.port=3000  # Porta interna do serviço
+        - traefik.http.services.gotenberg.loadbalancer.passHostHeader=true  # Passa o cabeçalho Host
+
+volumes:
+  gotenberg_data:
+    external: true  # Volume externo para persistência
+    name: gotenberg_data  # Nome do volume
+
+networks:
+  cloud:
+    external: true  # Rede externa pré-existente
+    name: cloud  # Nome da rede
